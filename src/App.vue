@@ -20,22 +20,6 @@
 
         <h3>Export</h3>
         <div class='row'>
-          <a href='#' @click.prevent='zazzleMugPrint()' class='col'>Onto a mug</a> 
-          <span class='col c-2'>
-            Print what you see onto a mug. <br/>Get a unique gift of your favorite city.
-          </span>
-        </div>
-        <div class='preview-actions message' v-if='zazzleLink || generatingPreview'>
-            <div v-if='zazzleLink' class='padded popup-help'>
-              If your browser has blocked the new window, <br/>please <a :href='zazzleLink' target='_blank'>click here</a>
-              to open it.
-            </div>
-            <div v-if='generatingPreview' class='loading-container'>
-              <loading-icon></loading-icon>
-              Generating preview url...
-            </div>
-        </div>
-        <div class='row'>
           <a href='#'  @click.prevent='toPNGFile' class='col'>As an image (.png)</a> 
           <span class='col c-2'>
             Save the current screen as a raster image.
@@ -48,30 +32,16 @@
             Save the current screen as a vector image.
           </span>
         </div>
-        <div v-if='false' class='row'>
-          <a href='#' @click.prevent='toProtobuf' class='col'>To a .PBF file</a> 
+        
+        <div class='row'>
+          <a href='#'  @click.prevent='toAsphaltSVGFile' class='col'>Asphalt Style</a> 
           <span class='col c-2'>
-            Save the current data as a protobuf message. For developer use only.
+            Save the current screen as a vector image.
           </span>
-        </div>
-
-        <h3>About</h3>
-        <div>
-          <p>This website was created by <a href='https://twitter.com/anvaka' target='_blank'>@anvaka</a>.
-          It downloads roads from OpenStreetMap and renders them with WebGL.
-          </p>
-          <p>
-           You can find the entire <a href='https://github.com/anvaka/city-roads'>source code here</a>. 
-           If you love this website you can also <a href='https://www.paypal.com/paypalme2/anvakos/3'>buy me a coffee</a> or 
-           <a href='https://www.patreon.com/anvaka'>support me on Patreon</a>, but you don't have to.
-          </p>
         </div>
       </div>
     </div>
   </div>
-
-  <editable-label v-if='placeFound' v-model='name' class='city-name' :printable='true' :style='{color: labelColorRGBA}' :overlay-manager='overlayManager'></editable-label>
-  <div v-if='placeFound' class='license printable can-drag' :style='{color: labelColorRGBA}'>data <a href='https://www.openstreetmap.org/about/' target="_blank" :style='{color: labelColorRGBA}'>© OpenStreetMap</a></div>
 </template>
 
 <script>
@@ -81,7 +51,6 @@ import EditableLabel from './components/EditableLabel.vue';
 import ColorPicker from './components/ColorPicker.vue';
 import createScene from './lib/createScene.js';
 import GridLayer from './lib/GridLayer.js';
-import generateZazzleLink from './lib/getZazzleLink.js';
 import appState from './lib/appState.js';
 import {getPrintableCanvas, getCanvas} from './lib/saveFile.js';
 import config from './config.js';
@@ -110,8 +79,6 @@ export default {
     return {
       placeFound: false,
       name: '',
-      zazzleLink: null,
-      generatingPreview: false,
       showSettings: false,
       settingsOpen: false,
       labelColor: config.getLabelColor().toRgb(),
@@ -125,7 +92,6 @@ export default {
     }
   },
   created() {
-    bus.on('scene-transform', this.handleSceneTransform);
     bus.on('background-color', this.syncBackground);
     bus.on('line-color', this.syncLineColor);
     this.overlayManager = createOverlayManager();
@@ -134,7 +100,6 @@ export default {
     debugger;
     this.overlayManager.dispose();
     this.dispose();
-    bus.off('scene-transform', this.handleSceneTransform);
     bus.off('background-color', this.syncBackground);
     bus.off('line-color', this.syncLineColor);
   },
@@ -147,9 +112,6 @@ export default {
     },
     toggleSettings() {
       this.showSettings = !this.showSettings;
-    },
-    handleSceneTransform() {
-      this.zazzleLink = null;
     },
     onGridLoaded(grid) {
       if (grid.isArea) {
@@ -203,6 +165,11 @@ export default {
       scene.saveToSVG(this.name)
     },
 
+    toAsphaltSVGFile(e) { 
+      this.setBackgroundColor('2e4862')
+      scene.saveToSVG(this.name)
+    },
+
     updateLayers() {
       // TODO: This method likely doesn't belong here
       let newLayers = [];
@@ -218,7 +185,6 @@ export default {
         }
         let layerColor = tinycolor.fromRatio(layer.color);
         newLayers.push(new ColorLayer(name, layerColor, newColor => {
-          this.zazzleLink = null;
           layer.color = toRatioColor(newColor);
           renderer.renderFrame();
           this.scene.fire('color-change', layer);
@@ -235,7 +201,6 @@ export default {
       function toRatioColor(c) {
         return {r: c.r/0xff, g: c.g/0xff, b: c.b/0xff, a: c.a}
       }
-      this.zazzleLink = null;
     },
 
     syncLineColor() {
@@ -246,36 +211,9 @@ export default {
       this.backgroundColor = newBackground.toRgb();
       this.updateLayers()
     },
-    // TODO: I need two background methods?
-    updateBackground() {
-      this.setBackgroundColor(this.backgroundColor)
-      this.zazzleLink = null;
-    },
     setBackgroundColor(c) {
       this.scene.background = c;
       document.body.style.backgroundColor = toRGBA(c);
-      this.zazzleLink = null;
-    },
-
-    zazzleMugPrint() {
-      if (this.zazzleLink) {
-        window.open(this.zazzleLink, '_blank');
-        recordOpenClick(this.zazzleLink);
-        return;
-      }
-
-      this.generatingPreview = true;
-      getPrintableCanvas(this.scene).then(printableCanvas => {
-        generateZazzleLink(printableCanvas).then(link => {
-          this.zazzleLink = link;
-          window.open(link, '_blank');
-          recordOpenClick(link);
-          this.generatingPreview = false;
-        }).catch(e => {
-          this.error = e;
-          this.generatingPreview = false;
-        });
-      });
     }
   }
 }
